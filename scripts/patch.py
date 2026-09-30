@@ -52,6 +52,7 @@ replace: точечные замены текста внутри записей 
 Для обработки иконок нужен ImageMagick 7 (magick).
 Запуск из корня модпака: python3 scripts/patch-cosmetic-jars.py
 """
+
 import fnmatch
 import io
 import json
@@ -60,23 +61,33 @@ import sys
 import subprocess
 import urllib.request
 import zipfile
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
 JARS = [
-{
+    {
         "upstream_name": "Luckys-Cozyhome-Refurnished-1.1.20.jar",
         "url": "https://cdn.modrinth.com/data/TNcLBDkY/versions/jJUWZCaQ/Luckys-Cozyhome-Refurnished-1.1.20.jar",
         "sha512": "8964b597c1a400970b834a1a4058df9332a687a7452ffc889ba8fe3cb35347d8512011d3679a24e7d1fa0f5f9904de3e1f7710b95f2e1fe6cb5b43b0c9f12847",
         "out": "files/mods/Luckys-Cozyhome-Refurnished-1.1.20-bf1.jar",
         "replace": [
-            ("assets/cozyhome/models/block/flat/inset_flat_11.json",
-             "cozyhome:block/inset_water_still", "cozyhome:block/liquid/inset_water_still"),
-            ("assets/cozyhome/models/block/flat/inset_flat_13.json",
-             "cozyhome:block/inset_water_still", "cozyhome:block/liquid/inset_water_still"),
-            ("assets/cozyhome/models/item/falling_liquid.json",
-             "cozyhome:block/falling_liquid", "cozyhome:block/stream_water_falling"),
+            (
+                "assets/cozyhome/models/block/flat/inset_flat_11.json",
+                "cozyhome:block/inset_water_still",
+                "cozyhome:block/liquid/inset_water_still",
+            ),
+            (
+                "assets/cozyhome/models/block/flat/inset_flat_13.json",
+                "cozyhome:block/inset_water_still",
+                "cozyhome:block/liquid/inset_water_still",
+            ),
+            (
+                "assets/cozyhome/models/item/falling_liquid.json",
+                "cozyhome:block/falling_liquid",
+                "cozyhome:block/stream_water_falling",
+            ),
         ],
     }
 ]
@@ -90,6 +101,7 @@ def get_bytes(url):
 
 def sha512(data):
     import hashlib
+
     return hashlib.sha512(data).hexdigest()
 
 
@@ -102,7 +114,10 @@ def prune_sounds(text, gone):
         for sound in event.get("sounds", []):
             entry = sound if isinstance(sound, dict) else {"name": sound}
             namespace, _, path = entry["name"].rpartition(":")
-            if entry.get("type", "file") == "file" and f"assets/{namespace or 'minecraft'}/sounds/{path}.ogg" in gone:
+            if (
+                entry.get("type", "file") == "file"
+                and f"assets/{namespace or 'minecraft'}/sounds/{path}.ogg" in gone
+            ):
                 pruned += 1
             else:
                 keep.append(sound)
@@ -126,10 +141,19 @@ def set_gun_weight(name, text, weight):
     Файлы ганпака не строгий JSON (комментарии), поэтому правка текстовая; вложенные "weight"
     обвесов (отступ глубже двух пробелов) не трогаются."""
     # Ганпак в CRLF: сохраняем исходный перевод строки.
-    text, count = re.subn(r'^  "weight": [0-9.]+,(\r?\n)', lambda m: f'  "weight": {weight},{m.group(1)}', text, flags=re.M)
+    text, count = re.subn(
+        r'^  "weight": [0-9.]+,(\r?\n)',
+        lambda m: f'  "weight": {weight},{m.group(1)}',
+        text,
+        flags=re.M,
+    )
     if count == 0:
-        text, count = re.subn(r'^(  "ammo_amount": \d+,(\r?\n))',
-                              lambda m: f'{m.group(1)}  "weight": {weight},{m.group(2)}', text, flags=re.M)
+        text, count = re.subn(
+            r'^(  "ammo_amount": \d+,(\r?\n))',
+            lambda m: f'{m.group(1)}  "weight": {weight},{m.group(2)}',
+            text,
+            flags=re.M,
+        )
     if count != 1:
         sys.exit(f"{name}: вес не установлен (совпадений {count}) -- формат изменился?")
     return text
@@ -160,12 +184,39 @@ def strip_empty_faces(text, name):
 
 
 def brand_hud_icon(payload):
-    size = subprocess.run(['magick', 'png:-', '-format', '%wx%h', 'info:'], input=payload,
-                          capture_output=True, check=True, timeout=30).stdout.decode()
-    return subprocess.run(['magick', 'png:-', '-alpha', 'extract', '-write', 'mpr:mask', '+delete',
-                           '-size', size, 'gradient:#F5A524-#F3E7D0', 'mpr:mask', '-alpha', 'off',
-                           '-compose', 'CopyOpacity', '-composite', '-strip', 'png:-'],
-                          input=payload, capture_output=True, check=True, timeout=30).stdout
+    size = subprocess.run(
+        ["magick", "png:-", "-format", "%wx%h", "info:"],
+        input=payload,
+        capture_output=True,
+        check=True,
+        timeout=30,
+    ).stdout.decode()
+    return subprocess.run(
+        [
+            "magick",
+            "png:-",
+            "-alpha",
+            "extract",
+            "-write",
+            "mpr:mask",
+            "+delete",
+            "-size",
+            size,
+            "gradient:#F5A524-#F3E7D0",
+            "mpr:mask",
+            "-alpha",
+            "off",
+            "-compose",
+            "CopyOpacity",
+            "-composite",
+            "-strip",
+            "png:-",
+        ],
+        input=payload,
+        capture_output=True,
+        check=True,
+        timeout=30,
+    ).stdout
 
 
 def slot_icon(index):
@@ -173,14 +224,38 @@ def slot_icon(index):
     rows = (0, 185, 370, 560, 737, 923, 1121, 1355)
     row, col = divmod(index, 6)
     left, right = round(col * 1161 / 6), round((col + 1) * 1161 / 6)
-    crop = f'{right-left}x{rows[row+1]-rows[row]}+{left}+{rows[row]}'
-    return subprocess.run(['magick', str(ROOT / 'assets/elitex-slot-atlas.png'), '-crop', crop, '+repage',
-                           '-trim', '+repage', '-resize', '56x56', '-gravity', 'center', '-background', 'none',
-                           '-extent', '64x64', '-strip', 'png:-'],
-                          capture_output=True, check=True, timeout=30).stdout
+    crop = f"{right - left}x{rows[row + 1] - rows[row]}+{left}+{rows[row]}"
+    return subprocess.run(
+        [
+            "magick",
+            str(ROOT / "assets/elitex-slot-atlas.png"),
+            "-crop",
+            crop,
+            "+repage",
+            "-trim",
+            "+repage",
+            "-resize",
+            "56x56",
+            "-gravity",
+            "center",
+            "-background",
+            "none",
+            "-extent",
+            "64x64",
+            "-strip",
+            "png:-",
+        ],
+        capture_output=True,
+        check=True,
+        timeout=30,
+    ).stdout
 
 
 def main():
+    if (zlib.ZLIB_VERSION, zlib.ZLIB_RUNTIME_VERSION) != ("1.3.2", "1.3.2"):
+        sys.exit(
+            f"Expected zlib 1.3.2 (standard), got {zlib.ZLIB_VERSION}/{zlib.ZLIB_RUNTIME_VERSION}; run just build"
+        )
     for spec in JARS:
         out_path = ROOT / spec["out"]
         local = ROOT / "files" / "mods" / spec["upstream_name"]
@@ -196,9 +271,16 @@ def main():
         source = zipfile.ZipFile(io.BytesIO(data))
         for entry in spec.get("required_entries", []):
             if entry not in source.namelist() or not source.read(entry):
-                sys.exit(f"{spec['upstream_name']}: отсутствует обязательный ресурс {entry}")
-        slots = sorted(n for n in source.namelist() if spec.get("slot_icons_prefix")
-                       and n.startswith(spec["slot_icons_prefix"]) and n.endswith(".png"))
+                sys.exit(
+                    f"{spec['upstream_name']}: отсутствует обязательный ресурс {entry}"
+                )
+        slots = sorted(
+            n
+            for n in source.namelist()
+            if spec.get("slot_icons_prefix")
+            and n.startswith(spec["slot_icons_prefix"])
+            and n.endswith(".png")
+        )
         if slots and len(slots) != 38:
             sys.exit("EliteX slot list changed; update the 6x7 atlas mapping")
         replacements = dict.fromkeys(spec.get("replace", []), 0)
@@ -207,28 +289,42 @@ def main():
         added = dict.fromkeys(spec.get("add", []), 0)
         removed = []
         weighted = set()
-        gone = {n for n in source.namelist() if any(fnmatch.fnmatch(n, pattern) for pattern in spec.get("remove", []))}
+        gone = {
+            n
+            for n in source.namelist()
+            if any(fnmatch.fnmatch(n, pattern) for pattern in spec.get("remove", []))
+        }
         sounds_pruned = dict.fromkeys(spec.get("prune_sounds", []), 0)
         with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as target:
             for info in source.infolist():
                 name = info.filename
-                if any(fnmatch.fnmatch(name, pattern) for pattern in spec.get("remove", [])):
+                if any(
+                    fnmatch.fnmatch(name, pattern) for pattern in spec.get("remove", [])
+                ):
                     removed.append(name)
                     continue
                 payload = source.read(name)
-                if spec.get("brand_hud_icons") and name.startswith(spec["brand_hud_icons"]) and name.endswith(".png"):
+                if (
+                    spec.get("brand_hud_icons")
+                    and name.startswith(spec["brand_hud_icons"])
+                    and name.endswith(".png")
+                ):
                     payload = brand_hud_icon(payload)
                 if name in slots:
                     payload = slot_icon(slots.index(name))
                 for entry, old, new in spec.get("patch_bytes", []):
                     if entry == name:
                         if payload.count(old) != 1 or len(old) != len(new):
-                            sys.exit(f"{name}: байтовый патч не подходит -- апстрим изменился?")
+                            sys.exit(
+                                f"{name}: байтовый патч не подходит -- апстрим изменился?"
+                            )
                         payload = payload.replace(old, new)
                         added[f"{name} (patch_bytes)"] = 1
                 for entry, old, new in spec.get("replace", []):
                     if entry == name:
-                        text, hits = apply_replacements(name, payload.decode("utf-8"), [(old, new)])
+                        text, hits = apply_replacements(
+                            name, payload.decode("utf-8"), [(old, new)]
+                        )
                         payload = text.encode("utf-8")
                         replacements[(entry, old, new)] = hits
                 for prefix, old, new in spec.get("replace_all", []):
@@ -238,12 +334,18 @@ def main():
                         if count:
                             payload = text.replace(old, new).encode("utf-8")
                             replace_all[(prefix, old, new)] += count
-                gun = name.removeprefix(spec.get("gun_weights_dir", "\0")).removesuffix("_data.json")
+                gun = name.removeprefix(spec.get("gun_weights_dir", "\0")).removesuffix(
+                    "_data.json"
+                )
                 if gun in spec.get("gun_weights", {}) and name.endswith("_data.json"):
-                    payload = set_gun_weight(name, payload.decode("utf-8"), spec["gun_weights"][gun]).encode("utf-8")
+                    payload = set_gun_weight(
+                        name, payload.decode("utf-8"), spec["gun_weights"][gun]
+                    ).encode("utf-8")
                     weighted.add(gun)
                 if name in sounds_pruned:
-                    text, sounds_pruned[name] = prune_sounds(payload.decode("utf-8"), gone)
+                    text, sounds_pruned[name] = prune_sounds(
+                        payload.decode("utf-8"), gone
+                    )
                     payload = text.encode("utf-8")
                 if name in spec.get("fix_empty_faces", []):
                     text, faces = strip_empty_faces(payload.decode("utf-8"), name)
@@ -254,6 +356,7 @@ def main():
                 # Фиксированная дата записи: иначе sha512 jar'а меняется при каждом запуске
                 # и расходится с хешем в mods/*.pw.toml.
                 fixed = zipfile.ZipInfo(entry, date_time=(1980, 1, 1, 0, 0, 0))
+                fixed.create_system = 3
                 fixed.compress_type = zipfile.ZIP_DEFLATED
                 target.writestr(fixed, content.encode("utf-8"))
                 added[entry] = 1
@@ -262,11 +365,21 @@ def main():
                 sys.exit(f"{entry}: запись для байтового патча не найдена")
         missing = set(spec.get("gun_weights", {})) - weighted
         if missing:
-            sys.exit(f"{spec['upstream_name']}: не найдены данные стволов для веса: {sorted(missing)}")
+            sys.exit(
+                f"{spec['upstream_name']}: не найдены данные стволов для веса: {sorted(missing)}"
+            )
         if weighted:
             print(f"  ~ вес стволов: {len(weighted)}")
-        if not removed and not replacements and not replace_all and not emptied and not added:
-            sys.exit(f"Ничего не изменено в {spec['upstream_name']}: паттерны устарели?")
+        if (
+            not removed
+            and not replacements
+            and not replace_all
+            and not emptied
+            and not added
+        ):
+            sys.exit(
+                f"Ничего не изменено в {spec['upstream_name']}: паттерны устарели?"
+            )
         for name in removed:
             print(f"  - {name}")
         for (entry, old, new), hits in replacements.items():
@@ -283,11 +396,15 @@ def main():
             print(f"  ~ {entry}: вырезано пустых граней {faces}")
         for entry, pruned in sounds_pruned.items():
             if pruned == 0:
-                sys.exit(f"{entry}: не выкинуто ни одной ссылки на удалённые звуки -- устарело?")
+                sys.exit(
+                    f"{entry}: не выкинуто ни одной ссылки на удалённые звуки -- устарело?"
+                )
             print(f"  ~ {entry}: выкинуто ссылок на удалённые звуки {pruned}")
         for entry in added:
             print(f"  + {entry}")
-        print(f"{out_path.relative_to(ROOT)} <- {spec['upstream_name']} (sha512 {sha512(out_path.read_bytes())})")
+        print(
+            f"{out_path.relative_to(ROOT)} <- {spec['upstream_name']} (sha512 {sha512(out_path.read_bytes())})"
+        )
 
 
 if __name__ == "__main__":

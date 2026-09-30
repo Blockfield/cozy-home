@@ -1,6 +1,8 @@
-# Blockfield — cozy-home
+# Cozy Home — патч ресурсов
 
-Private patch recipe and pinned release artifacts. Imported from `netherg-io/blockfield-modpack` at `19cdb35`.
+Resource patch for Cozy Home Refurnished 1.1.20 on Fabric 1.21.1. Fixes missing texture paths in block models.
+
+The recipe was extracted from `netherg-io/blockfield-modpack` at `19cdb35`. Release assets are used by the Blockfield client and server.
 
 Upstream: https://cdn.modrinth.com/data/TNcLBDkY/versions/jJUWZCaQ/Luckys-Cozyhome-Refurnished-1.1.20.jar
 
@@ -10,25 +12,19 @@ Build with `just setup`, create `files/mods`, then run `just build`. `scripts/to
 
 `BUILD-SHA256SUMS` records this canonical local build; `SHA256SUMS` continues to describe the immutable published artifact. Old releases used zlib-ng, whose ZIP bytes differ from standard zlib despite identical uncompressed entries. Do not overwrite a published asset with a rebuild. Local and CI must use the same pinned interpreter and guard; repeat builds in that environment must match `BUILD-SHA256SUMS`. A future published change needs a new game version and normal contract review.
 
-## Описание релиза (release-notes.md)
+## Описание релиза
 
-Каждый новый релиз публикуется с описанием в едином формате Blockfield: тело релиза и asset `release-notes.md` — один и тот же файл `release-notes/<тег>.md`, закоммиченный в этот репозиторий. Инструмент проверки общий, из `Blockfield/blockfield-client`:
+Файл `release-notes/<тег>.md` хранится в этом репозитории. Его содержимое используется
+как тело GitHub Release и как вложение `release-notes.md`.
+[Формат и подготовка](https://github.com/Blockfield/blockfield-client/blob/main/docs/RELEASE-NOTES.md)
+описаны в клиентском репозитории; используйте его `scripts/release-notes-tool.py`
+из проверенного клона для команд `skeleton` и `check` с параметрами
+`--repository Blockfield/cozy-home`, `--version <тег>` и `--kind mod`.
+Укажите `backfilled: false`, а в `previous_version` — последнюю опубликованную
+версию этой линии.
 
-```sh
-mkdir -p release-notes rn
-gh api repos/Blockfield/blockfield-client/contents/scripts/release-notes-tool.py \
-  -H 'Accept: application/vnd.github.raw' > rn/release-notes-tool.py
-just python rn/release-notes-tool.py skeleton --repository Blockfield/cozy-home --version <тег> \
-  --previous-version <прошлый тег> --kind mod --date YYYY-MM-DD > release-notes/<тег>.md
-# заполните разделы по коммитам и изменениям рецепта; чего не знаете — отметьте в «Источниках»
-just python rn/release-notes-tool.py check release-notes/<тег>.md \
-  --repository Blockfield/cozy-home --version <тег> --kind mod
-cp release-notes/<тег>.md rn/release-notes.md
-gh release create <тег> <артефакты> SHA256SUMS rn/release-notes.md \
-  --notes-file rn/release-notes.md --repo Blockfield/cozy-home
-```
-
-Если `check` выводит ошибки, релиз не публикуйте. После выпуска обновите пин в клиенте/сервере; их релизные описания подтянут этот файл в раздел «Обновлённые компоненты».
+Публикуйте новый артефакт с контрольными суммами и описанием; старые релизы
+не перезаписывайте. После выпуска обновите соответствующие пины сборки.
 
 ## Developer checks
 
@@ -41,3 +37,5 @@ just format
 ```
 
 `just --list` lists supported build and application commands.
+
+Условия использования: [LICENSE](LICENSE).
